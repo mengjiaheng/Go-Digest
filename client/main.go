@@ -42,9 +42,6 @@ func RandomString() string {
 	return string(b)
 }
 
-//储存nonce 和 nc 对应关系
-var ncMap = make(map[string]string)
-
 //根据qop计算response
 func ResponseQop(method string, hashMap map[string]string, digest Digest) (res string) {
 
@@ -55,7 +52,6 @@ func ResponseQop(method string, hashMap map[string]string, digest Digest) (res s
 	}
 
 	res = fmt.Sprintf("%x", md5.Sum([]byte(fmt.Sprintf("%x", md5.Sum([]byte(A1)))+":"+hashMap["nonce"][1:len(hashMap["nonce"])-1]+":"+digest.Nc+":"+digest.Cnonce+":"+digest.Qop+":"+fmt.Sprintf("%x", md5.Sum([]byte(A2))))))
-	// res = fmt.Sprintf("%x", md5.Sum([]byte(A1))) + ":" + hashMap["nonce"][1:len(hashMap["nonce"])-1] + ":" + digest.Nc + ":" + digest.Cnonce + ":" + digest.Qop + ":" + fmt.Sprintf("%x", md5.Sum([]byte(A2)))
 	return
 }
 

@@ -48,7 +48,6 @@ func ResponseQop(method string, hashMap map[string]string, digest Digest) (res s
 		A2 = method + ":" + hashMap["uri"][1:len(hashMap["uri"])-1]
 	}
 	res = fmt.Sprintf("%x", md5.Sum([]byte(fmt.Sprintf("%x", md5.Sum([]byte(A1)))+":"+hashMap["nonce"][1:len(hashMap["nonce"])-1]+":"+hashMap["nc"]+":"+hashMap["cnonce"][1:len(hashMap["cnonce"])-1]+":"+hashMap["qop"]+":"+fmt.Sprintf("%x", md5.Sum([]byte(A2))))))
-	// res = fmt.Sprintf("%x", md5.Sum([]byte(A1))) + ":" + hashMap["nonce"][1:len(hashMap["nonce"])-1] + ":" + hashMap["nc"] + ":" + hashMap["cnonce"][1:len(hashMap["cnonce"])-1] + ":" + hashMap["qop"] + ":" + fmt.Sprintf("%x", md5.Sum([]byte(A2)))
 	return
 }
 
@@ -163,5 +162,5 @@ func main() {
 		DigestAuth(c, c.Request.Header)
 		// c.String(200, "hello world")
 	})
-	r.Run(":8080")
+	r.Run(":8090")
 }
