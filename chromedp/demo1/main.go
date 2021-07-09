@@ -26,9 +26,11 @@ func ListenTarget(ctx context.Context) {
 				fmt.Println("监听是否发送请求：", reqUrl)
 			}
 		case *page.EventWindowOpen:
-
+			fmt.Println("窗口已打开")
 			// default:
 			// 	fmt.Println("hello world!")
+		case *page.EventJavascriptDialogOpening:
+			fmt.Println("不明白的代码")
 		}
 	})
 }
