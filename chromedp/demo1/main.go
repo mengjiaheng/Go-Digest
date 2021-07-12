@@ -3,15 +3,14 @@ package main
 import (
 	"context"
 	"demo1/core"
+	"demo1/utils"
 	"fmt"
-	"log"
-	"net/url"
 	"strings"
-	"time"
 
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
+	"github.com/gin-gonic/gin"
 )
 
 type Login struct {
@@ -21,17 +20,21 @@ type Login struct {
 
 var num int
 
+var digest core.Digest
+
+// var authCh = make(chan string)
+
+// var ctx context.Context
+// var cancel context.CancelFunc
+
 func ListenTarget(ctx context.Context) {
 	chromedp.ListenTarget(ctx, func(v interface{}) {
 		switch ev := v.(type) {
 		case *network.EventResponseReceived:
 			if ev.Type == network.ResourceTypeDocument || ev.Type == network.ResourceTypeXHR {
 				auth := ev.Response.Headers["Www-Authenticate"].(string)
-				fmt.Println("测试请求头数据", auth)
 
 				auths := strings.SplitN(auth, " ", 2)
-
-				// fmt.Println(auths[1])
 				//如果认证方式为Digest
 				if auths[0] == "Digest" {
 
@@ -46,16 +49,44 @@ func ListenTarget(ctx context.Context) {
 						}
 					}
 
-					for k, v := range hashMap {
-						fmt.Println(k, ":", v)
+					// for k, v := range hashMap {
+					// 	fmt.Println(k, ":", v)
+					// }
+
+					digest.Qop = hashMap["qop"]
+
+					//产生客户端随机数与请求计数器
+					digest.Cnonce = utils.RandomString()
+					digest.Nc = "0000001"
+
+					//设置账号密码
+					digest.UserName = "mengjiaheng"
+					digest.Password = "123456"
+					digest.Response = utils.ResponseQop(hashMap, digest)
+
+					auth = `Digest username="` + digest.UserName + `",realm="` + hashMap["realm"][1:len(hashMap["realm"])-1] + `",qop=` + hashMap["qop"][1:len(hashMap["qop"])-1] + `,nonce="` + hashMap["nonce"][1:len(hashMap["nonce"])-1] + `",uri="` + digest.Uri + `",nc=` + digest.Nc + `,cnonce="` + digest.Cnonce + `",response="` + digest.Response + `"`
+
+					opts := append(Opts, chromedp.Flag("headless", false))
+					ctxT, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
+					ctxT, cancel = chromedp.NewContext(ctxT)
+					err := core.RunResponse(ctxT, chromedp.Tasks{
+						core.LoadHeaders(auth),
+						chromedp.Navigate("http://127.0.0.1:8090/index"),
+					})
+					if err != nil {
+						cancel()
 					}
 				}
 			}
 		case *network.EventRequestWillBeSent:
 			if ev.Type == network.ResourceTypeDocument || ev.Type == network.ResourceTypeXHR {
-				req := ev.Request
-				reqUrl := req.URL
-				fmt.Println("监听是否发送请求：", reqUrl)
+				digest.Method = ev.Request.Method
+
+				str := strings.Split(ev.Request.URL, "/")
+				for i := 3; 2 < i && i < len(str); i++ {
+					digest.Uri = digest.Uri + "/" + str[i]
+				}
+				// fmt.Println("监听是否发送请求：", digest.Method, digest.Uri)
 				//数据库操作
 			}
 		case *page.EventWindowOpen:
@@ -71,70 +102,7 @@ func ListenTarget(ctx context.Context) {
 	})
 }
 
-func login(str *url.URL) chromedp.ActionFunc {
-
-	var weakPasswords []Login
-	weakPasswords = append(weakPasswords,
-		Login{
-			UserName: "mengjiaheng",
-			Password: "123456",
-		},
-		Login{
-			UserName: "asants",
-			Password: "asants",
-		})
-	return func(ctx context.Context) error {
-
-		if strings.Contains(str.Host, "login") {
-			//等待页面加载完
-			_ = chromedp.Sleep(2 * time.Second).Do(ctx)
-			var htmlArray []core.Html
-			chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(core.JSCode, 0), &htmlArray))
-		Loop:
-			for _, weakPassword := range weakPasswords {
-				for _, re := range htmlArray {
-					if re.ElType == "text" {
-						_ = chromedp.SendKeys(re.Xpath, weakPassword.UserName).Do(ctx)
-					}
-
-					if re.ElType == "password" {
-						_ = chromedp.SendKeys(re.Xpath, weakPassword.Password).Do(ctx)
-					}
-
-					if re.ElType == "submit" {
-						_ = chromedp.Submit(re.Xpath).Do(ctx)
-
-						//等待登录后跳转页面的时间
-						_ = chromedp.Sleep(2 * time.Second).Do(ctx)
-
-						var res string
-						_ = chromedp.Evaluate("window.location.href", &res).Do(ctx)
-
-						fmt.Println("res:", res)
-						if str.String() == res {
-							continue
-						} else {
-							break Loop
-						}
-					}
-				}
-			}
-		}
-		return nil
-	}
-}
-
-//设置请求头
-func loadHeaders(auth string) chromedp.ActionFunc {
-	return func(ctx context.Context) error {
-		return network.SetExtraHTTPHeaders(
-			network.Headers{"Authorization": auth}).Do(ctx)
-
-	}
-}
-
-var opts = append(chromedp.DefaultExecAllocatorOptions[:],
-	chromedp.Flag("headless", false),
+var Opts = append(chromedp.DefaultExecAllocatorOptions[:],
 	chromedp.Flag("disable-gpu", true),
 	chromedp.Flag("disable-web-security", true),
 	chromedp.Flag("disable-xss-auditor", true),
@@ -147,51 +115,23 @@ var opts = append(chromedp.DefaultExecAllocatorOptions[:],
 	chromedp.Flag("blink-settings", "imagesEnabled=false"))
 
 func main() {
+	r := gin.Default()
+	r.GET("/", func(c *gin.Context) {
+		opts := append(Opts, chromedp.Flag("headless", true))
+		ctx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
+		ctx, cancel = chromedp.NewContext(ctx)
 
-	// 禁用chrome headless
-	// opts = append(chromedp.DefaultExecAllocatorOptions[:],
-	// 	chromedp.Flag("headless", false),
-	// )
+		ListenTarget(ctx)
 
-	ctx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
-
-	// ctx, cancel = context.WithTimeout(ctx, time.Second*2)
-	ctx, cancel = chromedp.NewContext(ctx)
-
-	//待定
-	defer cancel()
-
-	// var site *url.URL
-	ListenTarget(ctx)
-	err := chromedp.Run(ctx, chromedp.Tasks{
-		loadHeaders(""),
-		chromedp.Navigate("http://127.0.0.1:8090/index"),
-		chromedp.Sleep(2 * time.Second),
-		// login(site),
+		err := core.RunResponse(ctx, chromedp.Tasks{
+			core.LoadHeaders(""),
+			chromedp.Navigate("http://127.0.0.1:8090/index"),
+			page.Close(),
+		})
+		if err != nil {
+			cancel()
+		}
+		c.String(200, "OK")
 	})
-	// go core.Form(ctx)
-	// create a timeout
-	// ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
-	// defer cancel()
-
-	// navigate to a page, wait for an element, click
-	// var example string
-	// sel := `//*[@id="username"]`
-	// err := chromedp.Run(ctx,
-	// 	loadHeaders(),
-	// 	chromedp.Navigate(`http://127.0.0.1:8090/index`),
-	// 	chromedp.WaitVisible("body"),
-	// 	//缓一缓
-	// 	chromedp.Sleep(2*time.Second),
-
-	// 	chromedp.SendKeys(sel, "username", chromedp.BySearch), //匹配xpath
-
-	// )
-	// time.Sleep(2 * time.Second)
-	if err != nil {
-		log.Fatal("未知报错：", err)
-	}
-
-	// log.Printf("Go's time.After example:\n%s", example)
-
+	r.Run(":9000")
 }
