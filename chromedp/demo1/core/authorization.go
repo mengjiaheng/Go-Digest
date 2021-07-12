@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"demo1/utils"
+	"fmt"
 	"strings"
 
 	"github.com/chromedp/cdproto/network"
@@ -52,6 +53,21 @@ func ParseAuthorization(headers network.Headers) string {
 		//设置账号密码
 		digest.UserName = "mengjiaheng"
 		digest.Password = "123456"
+
+		//
+		var authCha network.AuthChallenge
+		authCha.Scheme = "Digest"
+		authCha.Realm = digest.Realm
+		authCha.Origin = "http://127.0.0.1:8090/index"
+
+		var authChaRes network.AuthChallengeResponse
+		authChaRes.Response = "ProvideCredentials"
+		authChaRes.Username = "mengjiaheng"
+		authChaRes.Password = "123456"
+
+		json, _ := authChaRes.MarshalJSON()
+		fmt.Println(json)
+		authChaRes.Response.String()
 		digest.Response = ResponseQop(hashMap, digest)
 		auth = `Digest username="` + digest.UserName + `",realm="` + hashMap["realm"][1:len(hashMap["realm"])-1] + `",qop=` + hashMap["qop"][1:len(hashMap["qop"])-1] + `,nonce="` + hashMap["nonce"][1:len(hashMap["nonce"])-1] + `",uri="` + digest.Uri + `",nc=` + digest.Nc + `,cnonce="` + digest.Cnonce + `",response="` + digest.Response + `"`
 		return auth
